@@ -1,49 +1,55 @@
-var createError = require('http-errors');
 var express = require('express');
 var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
-
-const {connectToMongoDb} = require("./config/db");
+const http = require("http");
 require("dotenv").config();
-const http = require("http"); //1: importer le protocole http
 
-var indexRouter = require('./routes/indexRouter');
-var usersRouter = require('./routes/usersRouter');
-var osRouter = require('./routes/osRouter');
+const { connectToMongoDb } = require("./config/db");
+
+// import routes
+const authRoutes = require("./routes/authRoutes");
+const walletRoutes = require("./routes/walletRoutes");
+const transactionRoutes = require("./routes/transactionRoutes");
 
 var app = express();
 
-
-
+// middlewares
 app.use(logger('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public')));
 
-app.use('/', indexRouter);
-app.use('/users', usersRouter);
-app.use('/os', osRouter);
+// routes
+app.use("/auth", authRoutes);
+app.use("/wallet", walletRoutes);
+app.use("/transactions", transactionRoutes);
 
-// catch 404 and forward to error handler
-app.use(function (req, res, next) {
-  next(createError(404));
-});
+// server create
+const server = http.createServer(app);
+const PORT = process.env.PORT || process.env.port || 5000;
 
-// error handler
-app.use(function (err, req, res, next) {
-  // set locals, only providing error in development
-  res.locals.message = err.message;
-  res.locals.error = req.app.get('env') === 'development' ? err : {};
+connectToMongoDb()
+  .then(() => {
+    server.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("Mongo connection failed, server not started:", err.message);
+    process.exit(1);
+  });
 
-  // render the error page
-  res.status(err.status || 500);
-  res.render('error');
-});
-
-const server = http.createServer(app); //2: creation du serveur
-server.listen(process.env.port , () => { 
-  connectToMongoDb()
-  console.log('app is running in port 5000');
+// Gestion de l'erreur EADDRINUSE (port déjà utilisé)
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n❌ Erreur: Le port ${PORT} est déjà utilisé.`);
+    console.error(`💡 Solutions:`);
+    console.error(`   1. Arrêtez le processus qui utilise le port ${PORT}`);
+    console.error(`   2. Changez le PORT dans le fichier .env`);
+    console.error(`   3. Pour tuer le processus, exécutez: taskkill /PID <PID> /F`);
+  } else {
+    console.error('Erreur serveur:', err.message);
+  }
+  process.exit(1);
 });
